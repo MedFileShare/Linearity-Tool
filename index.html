@@ -82,8 +82,15 @@ textarea { min-height: 100px; resize: vertical; }
 </style>
 </head>
 <body>
-<div class="block-screen" id="blockScreen"><div class="icon">📵</div><h2>请在微信中打开</h2><p>本工具仅限微信公众号内使用，请通过微信访问。</p></div>
-<div class="auth-overlay" id="authOverlay">
+    <!-- 微信环境拦截 -->
+    <div class="block-screen show" id="blockScreen">
+        <div class="icon">📵</div>
+        <h2>请在微信中打开</h2>
+        <p>本工具仅限微信公众号内使用，请通过微信访问。</p>
+    </div>
+
+    <!-- 密码验证层 -->
+    <div class="auth-overlay hidden" id="authOverlay">
 <div class="auth-box">
 <div class="icon">🔐</div>
 <h2>访问验证</h2>
@@ -217,50 +224,80 @@ textarea { min-height: 100px; resize: vertical; }
 <script>
 // ==================== 安全验证模块 ====================
 (function() {
+    // 1. 检测微信环境
     const isWechat = /MicroMessenger/i.test(navigator.userAgent);
     if (!isWechat) {
-        document.getElementById("blockScreen").classList.add("show");
-        document.getElementById("authOverlay").classList.add("hidden");
         return;
     }
+    // 微信环境：隐藏拦截页，显示密码验证页
+    document.getElementById('blockScreen').classList.remove('show');
+    document.getElementById('authOverlay').classList.remove('hidden');
+
+    // 2. 密码验证（简单混淆，可定期更换）
+    // 密码: （实际使用时请修改）
     const CORRECT_PWD = String.fromCharCode(97,112,108,51,57,48,55); // ""
-    const STORAGE_KEY = "_line_tool_auth";
-    const EXPIRE_HOURS = 24;
+    const STORAGE_KEY = '_line_tool_auth';
+    const EXPIRE_HOURS = 12; // 验证有效期12小时
+
+    // 检查是否已验证
     function checkAuth() {
         const record = localStorage.getItem(STORAGE_KEY);
         if (!record) return false;
         try {
             const data = JSON.parse(atob(record));
             if (data.p !== btoa(CORRECT_PWD)) return false;
-            if (Date.now() - data.t > EXPIRE_HOURS * 3600 * 1000) return false;
+            const now = Date.now();
+            if (now - data.t > EXPIRE_HOURS * 3600 * 1000) return false;
             return true;
-        } catch(e) { return false; }
+        } catch(e) {
+            return false;
+        }
     }
+
+    // 保存验证状态
     function saveAuth() {
         const data = { p: btoa(CORRECT_PWD), t: Date.now() };
         localStorage.setItem(STORAGE_KEY, btoa(JSON.stringify(data)));
     }
+
+    // 已验证则直接显示
     if (checkAuth()) {
-        document.getElementById("authOverlay").classList.add("hidden");
-        document.getElementById("mainContainer").classList.add("show");
+        document.getElementById('authOverlay').classList.add('hidden');
+        document.getElementById('mainContainer').classList.add('show');
         return;
     }
-    document.getElementById("authBtn").addEventListener("click", function() {
-        const input = document.getElementById("authInput").value.trim();
-        const errorEl = document.getElementById("authError");
+
+    // 验证按钮
+    document.getElementById('authBtn').addEventListener('click', function() {
+        const input = document.getElementById('authInput').value.trim();
+        const errorEl = document.getElementById('authError');
         if (input === CORRECT_PWD) {
             saveAuth();
-            document.getElementById("authOverlay").classList.add("hidden");
-            document.getElementById("mainContainer").classList.add("show");
+            document.getElementById('authOverlay').classList.add('hidden');
+            document.getElementById('mainContainer').classList.add('show');
         } else {
-            errorEl.textContent = "密码错误，请重新输入";
-            document.getElementById("authInput").value = "";
-            document.getElementById("authInput").focus();
+            errorEl.textContent = '密码错误，请重新输入';
+            document.getElementById('authInput').value = '';
+            document.getElementById('authInput').focus();
         }
     });
-    document.getElementById("authInput").addEventListener("keypress", function(e) {
-        if (e.key === "Enter") document.getElementById("authBtn").click();
+
+    // 回车提交
+    document.getElementById('authInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') document.getElementById('authBtn').click();
     });
+
+    // 3. 简单反调试：检测开发者工具（可选，会误伤但增加难度）
+    (function() {
+        const threshold = 160;
+        const check = function() {
+            if (window.outerHeight - window.innerHeight > threshold ||
+                window.outerWidth - window.innerWidth > threshold) {
+                // 可能打开了开发者工具，不做强制处理，仅增加干扰
+            }
+        };
+        setInterval(check, 1000);
+    })();
 })();
 
 // ==================== 计算核心模块 ====================
