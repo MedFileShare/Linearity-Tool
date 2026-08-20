@@ -167,7 +167,6 @@ textarea { min-height: 100px; resize: vertical; }
 <div class="btn-group">
 <button class="btn btn-primary" id="calcBtn">执行计算</button>
 <button class="btn btn-secondary" id="clearBtn">清空数据</button>
-<button class="btn btn-warning" id="demoBtn">载入示例</button>
 </div>
 <div class="result-box" id="resultBox">
 <div class="card">
@@ -240,9 +239,9 @@ textarea { min-height: 100px; resize: vertical; }
 
     // 检查是否已验证
     function checkAuth() {
-        const record = localStorage.getItem(STORAGE_KEY);
-        if (!record) return false;
         try {
+            const record = localStorage.getItem(STORAGE_KEY);
+            if (!record) return false;
             const data = JSON.parse(atob(record));
             if (data.p !== btoa(CORRECT_PWD)) return false;
             const now = Date.now();
@@ -255,14 +254,25 @@ textarea { min-height: 100px; resize: vertical; }
 
     // 保存验证状态
     function saveAuth() {
-        const data = { p: btoa(CORRECT_PWD), t: Date.now() };
-        localStorage.setItem(STORAGE_KEY, btoa(JSON.stringify(data)));
+        try {
+            const data = { p: btoa(CORRECT_PWD), t: Date.now() };
+            localStorage.setItem(STORAGE_KEY, btoa(JSON.stringify(data)));
+            return true;
+        } catch(e) {
+            return false; // localStorage 写入失败（禁用、隐私模式）也允许进入
+        }
+    }
+
+    // 进入工具（先切换 UI，再持久化，保证任何异常下 UI 都有反馈）
+    function enterApp() {
+        document.getElementById('authOverlay').classList.add('hidden');
+        document.getElementById('mainContainer').classList.add('show');
+        saveAuth(); // 持久化失败不影响本次进入
     }
 
     // 已验证则直接显示
     if (checkAuth()) {
-        document.getElementById('authOverlay').classList.add('hidden');
-        document.getElementById('mainContainer').classList.add('show');
+        enterApp();
         return;
     }
 
@@ -271,9 +281,8 @@ textarea { min-height: 100px; resize: vertical; }
         const input = document.getElementById('authInput').value.trim();
         const errorEl = document.getElementById('authError');
         if (input === CORRECT_PWD) {
-            saveAuth();
-            document.getElementById('authOverlay').classList.add('hidden');
-            document.getElementById('mainContainer').classList.add('show');
+            errorEl.textContent = '';
+            enterApp();
         } else {
             errorEl.textContent = '密码错误，请重新输入';
             document.getElementById('authInput').value = '';
@@ -287,18 +296,21 @@ textarea { min-height: 100px; resize: vertical; }
     });
 
     // 3. 简单反调试：检测开发者工具（可选，会误伤但增加难度）
-    (function() {
-        const threshold = 160;
-        const check = function() {
-            if (window.outerHeight - window.innerHeight > threshold ||
-                window.outerWidth - window.innerWidth > threshold) {
-                // 可能打开了开发者工具，不做强制处理，仅增加干扰
-            }
-        };
-        setInterval(check, 1000);
-    })();
+    try {
+        (function() {
+            const threshold = 160;
+            const check = function() {
+                if (window.outerHeight - window.innerHeight > threshold ||
+                    window.outerWidth - window.innerWidth > threshold) {
+                    // 可能打开了开发者工具，不做强制处理，仅增加干扰
+                }
+            };
+            setInterval(check, 1000);
+        })();
+    } catch(e) { /* 忽略反调试异常，确保主流程不受影响 */ }
 })();
-
+</script>
+<script>
 // ==================== 计算核心模块 ====================
 let concentration = [], response = [], residuals = [];
 let slope, intercept, r, r2, rss, tss;
@@ -312,8 +324,7 @@ function showToast(msg) {
 }
 
 function parseTextToArr(text) {
-    return text.split(/[
-]+/).map(item => item.trim()).filter(item => item !== '').map(item => parseFloat(item)).filter(num => !isNaN(num));
+    return text.split(/[\r\n]+/).map(item => item.trim()).filter(item => item !== '').map(item => parseFloat(item)).filter(num => !isNaN(num));
 }
 
 function getPointSettings() {
@@ -322,17 +333,6 @@ function getPointSettings() {
 
 function getAxisLabels() {
     return { x: document.getElementById('xAxisLabel').value || 'X轴', y: document.getElementById('yAxisLabel').value || 'Y轴' };
-}
-
-function loadDemoData() {
-    document.getElementById('xAxisLabel').value = '分析物浓度 (μg/mL)';
-    document.getElementById('concText').value =;
-    document.getElementById('yAxisLabel').value = '测量响应信号（峰面积）';
-    document.getElementById('respText').value = ;
-    document.getElementById('transformType').value = 'none';
-    document.getElementById('hundredPercentArea').value = '';
-    document.getElementById('residualLimit').value = '2';
-    showToast("示例数据已载入");
 }
 
 function clearData() {
@@ -393,18 +393,6 @@ function showResult() {
     const transformNames = { 'none': '无转换', 'log': '对数转换', 'sqrt': '平方根转换', 'reciprocal': '倒数转换' };
     const hundredPercentArea = parseFloat(document.getElementById('hundredPercentArea').value) || 0;
     const residualLimitPercent = parseFloat(document.getElementById('residualLimit').value) || 20;
-    const n = concentration.length;
-
-    let hasPattern = false, consecutiveSameSign = 0, maxConsecutive = 0;
-    for (let i = 1; i < residuals.length; i++) {
-        if (Math.sign(residuals[i]) === Math.sign(residuals[i-1]) && residuals[i] !== 0 && residuals[i-1] !== 0) { consecutiveSameSign++; maxConsecutive = Math.max(maxConsecutive, consecutiveSameSign); }
-        else { consecutiveSameSign = 0; }
-    }
-    const signChanges = residuals.reduce((count, val, i) => { if (i > 0 && Math.sign(val) !== Math.sign(residuals[i-1]) && val !== 0 && residuals[i-1] !== 0) return count + 1; return count; }, 0);
-    const expectedSignChanges = (n - 1) * 0.5;
-    const varianceSignChanges = (n + 1) / 12;
-    const zScore = Math.abs(signChanges - expectedSignChanges) / Math.sqrt(varianceSignChanges);
-    if (maxConsecutive >= 3 || zScore > 1.96) hasPattern = true;
 
     const rssTssRatio = tss > 0 ? (rss / tss) * 100 : 0;
     const rssTssPass = rssTssRatio <= 1;
@@ -437,7 +425,6 @@ function showResult() {
     html += '<div class="result-item"><span class="label">RSS/TSS</span><span class="value ' + (rssTssPass ? 'pass' : 'fail') + '">' + rssTssRatio.toFixed(4) + '% ' + (rssTssPass ? '✓' : '✗') + '</span></div>';
     html += '<div class="result-item"><span class="label">单点残差</span><span class="value ' + (absResidualPass ? 'pass' : (hundredPercentArea ? 'fail' : '')) + '">' + absResidualResult + '</span></div>';
     html += '<div class="result-item"><span class="label">截距判定</span><span class="value ' + (interceptAbsPass ? 'pass' : (hundredPercentArea ? 'fail' : '')) + '">' + interceptAbsResult + '</span></div>';
-    html += '<div class="result-item"><span class="label">残差趋势</span><span class="value">' + (hasPattern ? '存在非随机趋势' : '随机分布') + '</span></div>';
     document.getElementById('resultList').innerHTML = html;
 
     document.getElementById('overallJudgment').className = 'judgment ' + (overallPass ? 'pass' : 'fail');
@@ -522,24 +509,15 @@ function closeReport() {
 function copyResults() {
     if (concentration.length === 0) { showToast('请先执行计算！'); return; }
     const al = getAxisLabels();
-    let text = '线性关系评估报告
-━━━━━━━━━━━━━━
-';
-    text += '回归方程：y = ' + slope.toFixed(4) + 'x ' + (intercept >= 0 ? '+' : '-') + ' ' + Math.abs(intercept).toFixed(4) + '
-';
-    text += '相关系数 r：' + r.toFixed(6) + '
-';
-    text += '斜率 k：' + slope.toFixed(4) + '
-';
-    text += 'Y轴截距 b：' + intercept.toFixed(4) + '
-';
-    text += '━━━━━━━━━━━━━━
-数据明细：
-';
+    let text = '线性关系评估报告\n━━━━━━━━━━━━━━\n';
+    text += '回归方程：y = ' + slope.toFixed(4) + 'x ' + (intercept >= 0 ? '+' : '-') + ' ' + Math.abs(intercept).toFixed(4) + '\n';
+    text += '相关系数 r：' + r.toFixed(6) + '\n';
+    text += '斜率 k：' + slope.toFixed(4) + '\n';
+    text += 'Y轴截距 b：' + intercept.toFixed(4) + '\n';
+    text += '━━━━━━━━━━━━━━\n数据明细：\n';
     for (let i = 0; i < concentration.length; i++) {
         const yPred = slope * concentration[i] + intercept;
-        text += (i + 1) + '. ' + al.x + '=' + concentration[i] + ', ' + al.y + '=' + response[i] + ', 预测=' + yPred.toFixed(4) + ', 残差=' + residuals[i].toFixed(4) + '
-';
+        text += (i + 1) + '. ' + al.x + '=' + concentration[i] + ', ' + al.y + '=' + response[i] + ', 预测=' + yPred.toFixed(4) + ', 残差=' + residuals[i].toFixed(4) + '\n';
     }
     copyToClipboard(text);
 }
@@ -565,7 +543,6 @@ function copyToClipboard(text) {
 // 事件绑定
 document.getElementById('calcBtn').addEventListener('click', calculateLinear);
 document.getElementById('clearBtn').addEventListener('click', clearData);
-document.getElementById('demoBtn').addEventListener('click', loadDemoData);
 document.getElementById('reportBtn').addEventListener('click', generateReport);
 document.getElementById('copyBtn').addEventListener('click', copyResults);
 document.getElementById('modalClose').addEventListener('click', closeReport);
