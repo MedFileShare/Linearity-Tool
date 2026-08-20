@@ -21,12 +21,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 .form-group label { display: block; font-size: 14px; color: #34495e; font-weight: 500; margin-bottom: 6px; }
 .form-group label small { color: #7f8c8d; font-weight: normal; font-size: 12px; }
 input[type="text"], input[type="number"], select, textarea { width: 100%; padding: 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 15px; font-family: inherit; -webkit-appearance: none; background: white; }
+/* 去掉 number 输入框的上下箭头 */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: #3498db; }
 textarea { min-height: 100px; resize: vertical; }
 .btn-group { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
 .btn { flex: 1; padding: 12px 0; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600; text-align: center; transition: all 0.2s; min-width: 100px; }
 .btn:active { transform: scale(0.98); opacity: 0.9; }
-.btn-primary { background: #16a34a; color: white; }
+.btn-primary { background: #3498db; color: white; }
 .btn-secondary { background: #95a5a6; color: white; }
 .btn-info { background: #3498db; color: white; }
 .btn-warning { background: #f39c12; color: white; }
@@ -515,7 +519,7 @@ function drawCharts() {
 function generateReport() {
     if (concentration.length === 0) { showToast('请先执行计算！'); return; }
     const transform = document.getElementById('transformType').value;
-    const transformNames = { 'none': '无转换（原始数据）', 'log': '对数转换', 'sqrt': '平方根转换', 'reciprocal': '倒数转换' };
+    const transformNames = { 'none': '无转换（原始数据）', 'log': '对数转换 log(响应值)', 'sqrt': '平方根转换 √响应值', 'reciprocal': '倒数转换 1/响应值' };
     const hundredPercentArea = parseFloat(document.getElementById('hundredPercentArea').value) || 0;
     const residualLimitPercent = parseFloat(document.getElementById('residualLimit').value) || 20;
 
@@ -531,27 +535,64 @@ function generateReport() {
 
     const rssTssRatio = tss > 0 ? (rss / tss) * 100 : 0;
     const rssTssPass = rssTssRatio <= 1;
-    let reportHtml = '';
-    reportHtml += '<div class="result-item"><span class="label">相关系数 r</span><span class="value">' + r.toFixed(6) + '</span></div>';
-    reportHtml += '<div class="result-item"><span class="label">斜率 k</span><span class="value">' + slope.toFixed(4) + '</span></div>';
-    reportHtml += '<div class="result-item"><span class="label">Y轴截距 b</span><span class="value">' + intercept.toFixed(4) + '</span></div>';
-    reportHtml += '<div class="result-item"><span class="label">RSS/TSS</span><span class="value ' + (rssTssPass ? 'pass' : 'fail') + '">' + rssTssRatio.toFixed(4) + '% ' + (rssTssPass ? '✓ 合格' : '✗ 不合格') + '</span></div>';
+    const rssLimit = 1; // RSS/TSS 标准限值 1%
 
-    if (hundredPercentArea > 0) {
-        const absResidualLimit = hundredPercentArea * (residualLimitPercent / 100);
-        let maxAbsResidual = 0;
-        for (let i = 0; i < residuals.length; i++) maxAbsResidual = Math.max(maxAbsResidual, Math.abs(residuals[i]));
-        const absPass = maxAbsResidual <= absResidualLimit;
-        reportHtml += '<div class="result-item"><span class="label">单点残差</span><span class="value ' + (absPass ? 'pass' : 'fail') + '">' + (absPass ? '✓ 合格' : '✗ 不合格') + ' (最大' + maxAbsResidual.toFixed(2) + ')</span></div>';
-        const interceptAbsLimit = hundredPercentArea * (residualLimitPercent / 100);
-        const absIntercept = Math.abs(intercept);
-        const intPass = absIntercept <= interceptAbsLimit;
-        reportHtml += '<div class="result-item"><span class="label">截距判定</span><span class="value ' + (intPass ? 'pass' : 'fail') + '">' + (intPass ? '✓ 合格' : '✗ 不合格') + ' (' + absIntercept.toFixed(2) + ')</span></div>';
-    }
+    // 单点残差与截距判定（与主卡片保持一致的阈值与计算口径）
+    let maxAbsResidual = 0;
+    for (let i = 0; i < residuals.length; i++) maxAbsResidual = Math.max(maxAbsResidual, Math.abs(residuals[i]));
+    const absResidualLimit = hundredPercentArea > 0 ? hundredPercentArea * (residualLimitPercent / 100) : 0;
+    const absPass = hundredPercentArea > 0 && maxAbsResidual <= absResidualLimit;
+    const absResidualDisplay = hundredPercentArea > 0
+        ? (absPass ? '✓ 合格（最大绝对残差 ' + maxAbsResidual.toFixed(2) + ' ≤ 限值 ' + absResidualLimit.toFixed(2) + '）'
+                  : '✗ 不合格（最大绝对残差 ' + maxAbsResidual.toFixed(2) + ' > 限值 ' + absResidualLimit.toFixed(2) + '）')
+        : '未设定';
+
+    const absIntercept = Math.abs(intercept);
+    const interceptAbsLimit = absResidualLimit; // 同一百分数基准 × residualLimit%
+    const intPass = hundredPercentArea > 0 && absIntercept <= interceptAbsLimit;
+    const interceptAbsDisplay = hundredPercentArea > 0
+        ? (intPass ? '✓ 合格（截距绝对值 ' + absIntercept.toFixed(2) + ' ≤ 限值 ' + interceptAbsLimit.toFixed(2) + '）'
+                  : '✗ 不合格（截距绝对值 ' + absIntercept.toFixed(2) + ' > 限值 ' + interceptAbsLimit.toFixed(2) + '）')
+        : '未设定';
+
+    const overallPass = rssTssPass && (!hundredPercentArea || (absPass && intPass));
+
+    let reportHtml = '';
+    // 10 项与主卡片完全对齐：数据转换 / 回归方程 / 相关系数 r / 斜率 k / Y轴截距 b / RSS / TSS / RSS/TSS 比值 + RSS/TSS判定 / 单点残差判定 / 截距判定
+    reportHtml += '<div class="result-item"><span class="label">数据转换方式</span><span class="value">' + (transformNames[transform] || '未知') + '</span></div>';
+    reportHtml += '<div class="result-item"><span class="label">回归方程 (y = kx + b)</span><span class="value">y = ' + slope.toFixed(4) + 'x ' + (intercept >= 0 ? '+' : '-') + ' ' + Math.abs(intercept).toFixed(4) + '</span></div>';
+    reportHtml += '<div class="result-item"><span class="label">相关系数 (r)</span><span class="value">' + r.toFixed(6) + '</span></div>';
+    reportHtml += '<div class="result-item"><span class="label">斜率 (k)</span><span class="value">' + slope.toFixed(4) + '</span></div>';
+    reportHtml += '<div class="result-item"><span class="label">Y轴截距 (b)</span><span class="value">' + intercept.toFixed(4) + '</span></div>';
+    reportHtml += '<div class="result-item"><span class="label">残差平方和 (RSS)</span><span class="value">' + formatSciOrFixed(rss) + '</span></div>';
+    reportHtml += '<div class="result-item"><span class="label">总平方和 (TSS)</span><span class="value">' + formatSciOrFixed(tss) + '</span></div>';
+    reportHtml += '<div class="result-item"><span class="label">RSS/TSS 比值</span><span class="value ' + (rssTssPass ? 'pass' : 'fail') + '">' + rssTssRatio.toFixed(4) + '%</span></div>';
+    reportHtml += '<div class="result-item"><span class="label">RSS/TSS 判定</span><span class="value ' + (rssTssPass ? 'pass' : 'fail') + '">'
+        + (rssTssPass ? '✓ 合格（RSS/TSS ' + rssTssRatio.toFixed(4) + '% ≤ ' + rssLimit + '%）'
+                      : '✗ 不合格（RSS/TSS ' + rssTssRatio.toFixed(4) + '% > ' + rssLimit + '%）')
+        + '</span></div>';
+    reportHtml += '<div class="result-item"><span class="label">单点绝对残差判定</span><span class="value ' + (hundredPercentArea > 0 ? (absPass ? 'pass' : 'fail') : '') + '">' + absResidualDisplay + '</span></div>';
+    reportHtml += '<div class="result-item"><span class="label">截距绝对值判定</span><span class="value ' + (hundredPercentArea > 0 ? (intPass ? 'pass' : 'fail') : '') + '">' + interceptAbsDisplay + '</span></div>';
+
+    // 总判定
+    reportHtml += '<div class="judgment ' + (overallPass ? 'pass' : 'fail') + '" style="margin-top:16px;padding:14px;border-radius:8px;text-align:center;font-size:17px;font-weight:700;">'
+        + (overallPass ? '✅ 合格<br><span style="font-size:13px;font-weight:normal;">线性关系评估符合要求</span>'
+                       : '❌ 不合格<br><span style="font-size:13px;font-weight:normal;">线性关系评估不符合要求</span>')
+        + '</div>';
+
     document.getElementById('reportResults').innerHTML = reportHtml;
 
     document.getElementById('reportModal').classList.add('show');
     document.body.style.overflow = 'hidden';
+}
+
+// 数值显示辅助：数值过小/过大时自动用科学计数法（与主页面展示一致）
+function formatSciOrFixed(v) {
+    if (!isFinite(v)) return '-';
+    if (v === 0) return '0';
+    var av = Math.abs(v);
+    if (av >= 1e6 || av < 1e-3) return v.toExponential(4);
+    return v.toFixed(4).replace(/\.?0+$/, '') || '0';
 }
 
 function closeReport() {
