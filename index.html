@@ -56,6 +56,13 @@ textarea { min-height: 100px; resize: vertical; }
 .report-table th { background: #f5f5f5; font-weight: 600; }
 .modal-close { position: absolute; top: 12px; right: 16px; font-size: 24px; color: #7f8c8d; background: none; border: none; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; }
 .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+/* 报告纯文本行样式（字段名：值） */
+.report-line { display: flex; align-items: baseline; padding: 6px 0; font-size: 14px; line-height: 1.7; border-bottom: 1px dashed #eef1f4; }
+.report-line:last-of-type { border-bottom: none; }
+.report-line .r-label { color: #34495e; font-weight: 500; flex-shrink: 0; margin-right: 8px; white-space: nowrap; }
+.report-line .r-value { color: #2c3e50; flex: 1; word-break: break-all; }
+.report-line .r-value.r-pass { color: #16a34a; font-weight: 600; }
+.report-line .r-value.r-fail { color: #dc2626; font-weight: 600; }
 .toast { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.75); color: white; padding: 14px 24px; border-radius: 8px; font-size: 14px; z-index: 2000; display: none; }
 .toast.show { display: block; }
 .auth-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #f5f7fa; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
@@ -201,22 +208,16 @@ textarea { min-height: 100px; resize: vertical; }
 <div class="report-content" style="position: relative;">
 <button class="modal-close" id="modalClose">&times;</button>
 <div class="report-header">
-<h3>线性关系</h3>
-<div style="font-size: 13px; color: #7f8c8d; margin-top: 4px;">线性回归分析</div>
+<h3>2. 线性评估结果</h3>
 </div>
-<div style="margin-bottom: 12px;">
-<strong style="font-size: 14px;">回归方程：</strong>
-<span id="reportEquation" style="font-size: 14px; font-weight: 600;">-</span>
-</div>
-<div style="margin-bottom: 12px;">
-<strong style="font-size: 14px;">数据转换：</strong>
-<span id="reportTransform" style="font-size: 14px;">-</span>
-</div>
+<div id="reportResults"></div>
+<div id="reportDataSection" style="display:none; margin-top:14px;">
+<div style="font-size:13px;color:#34495e;font-weight:600;margin-bottom:8px;border-left:3px solid #3498db;padding-left:8px;">数据明细</div>
 <table class="report-table">
 <tr><th>序号</th><th>浓度</th><th>响应值</th><th>预测值</th><th>残差</th></tr>
 <tbody id="reportTableBody"></tbody>
 </table>
-<div id="reportResults"></div>
+</div>
 <div class="modal-actions">
 <button class="btn btn-secondary" id="closeReportBtn" style="flex: 1;">关闭</button>
 <button class="btn btn-primary" id="copyReportBtn" style="flex: 1;">复制报告</button>
@@ -523,9 +524,58 @@ function generateReport() {
     const hundredPercentArea = parseFloat(document.getElementById('hundredPercentArea').value) || 0;
     const residualLimitPercent = parseFloat(document.getElementById('residualLimit').value) || 20;
 
-    document.getElementById('reportEquation').textContent = 'y = ' + slope.toFixed(4) + 'x ' + (intercept >= 0 ? '+' : '-') + ' ' + Math.abs(intercept).toFixed(4);
-    document.getElementById('reportTransform').textContent = transformNames[transform] || '未知';
+    const rssTssRatio = tss > 0 ? (rss / tss) * 100 : 0;
+    const rssTssPass = rssTssRatio <= 1;
+    const rssLimit = 1;
 
+    let maxAbsResidual = 0;
+    for (let i = 0; i < residuals.length; i++) maxAbsResidual = Math.max(maxAbsResidual, Math.abs(residuals[i]));
+    const absResidualLimit = hundredPercentArea > 0 ? hundredPercentArea * (residualLimitPercent / 100) : 0;
+    const absPass = hundredPercentArea > 0 && maxAbsResidual <= absResidualLimit;
+    const absIntercept = Math.abs(intercept);
+    const intPass = hundredPercentArea > 0 && absIntercept <= absResidualLimit;
+
+    const equation = 'y = ' + slope.toFixed(4) + 'x ' + (intercept >= 0 ? '+' : '-') + ' ' + Math.abs(intercept).toFixed(4);
+    const transformLabel = transformNames[transform] || '未知';
+
+    // 构建「字段名：值」样式报告（与第一张图一致）
+    let html = '';
+    html += '<div class="report-line"><span class="r-label">数据转换方式：</span><span class="r-value">' + transformLabel + '</span></div>';
+    html += '<div class="report-line"><span class="r-label">回归方程 (y = kx + b)：</span><span class="r-value">' + equation + '</span></div>';
+    html += '<div class="report-line"><span class="r-label">相关系数 (r)：</span><span class="r-value">' + r.toFixed(6) + '</span></div>';
+    html += '<div class="report-line"><span class="r-label">斜率 (k)：</span><span class="r-value">' + slope.toFixed(4) + '</span></div>';
+    html += '<div class="report-line"><span class="r-label">Y轴截距 (b)：</span><span class="r-value">' + intercept.toFixed(4) + '</span></div>';
+    html += '<div class="report-line"><span class="r-label">残差平方和 (RSS)：</span><span class="r-value">' + formatSciOrFixed(rss) + '</span></div>';
+    html += '<div class="report-line"><span class="r-label">总平方和 (TSS)：</span><span class="r-value">' + formatSciOrFixed(tss) + '</span></div>';
+    html += '<div class="report-line"><span class="r-label">RSS/TSS比值：</span><span class="r-value">' + rssTssRatio.toFixed(4) + '%</span></div>';
+
+    // RSS/TSS 判定
+    html += '<div class="report-line"><span class="r-label">RSS/TSS判定：</span><span class="r-value ' + (rssTssPass ? 'r-pass' : 'r-fail') + '">'
+        + (rssTssPass ? '✓ 合格（RSS/TSS ' + rssTssRatio.toFixed(4) + '% ≤ ' + rssLimit + '%）'
+                      : '✗ 不合格（RSS/TSS ' + rssTssRatio.toFixed(4) + '% > ' + rssLimit + '%）')
+        + '</span></div>';
+
+    // 单点绝对残差判定
+    if (hundredPercentArea > 0) {
+        html += '<div class="report-line"><span class="r-label">单点绝对残差判定：</span><span class="r-value ' + (absPass ? 'r-pass' : 'r-fail') + '">'
+            + (absPass ? '✓ 合格（最大绝对残差 ' + maxAbsResidual.toFixed(2) + ' ≤ 限值 ' + absResidualLimit.toFixed(2) + '）'
+                      : '✗ 不合格（最大绝对残差 ' + maxAbsResidual.toFixed(2) + ' > 限值 ' + absResidualLimit.toFixed(2) + '）')
+            + '</span></div>';
+    } else {
+        html += '<div class="report-line"><span class="r-label">单点绝对残差判定：</span><span class="r-value">未设定</span></div>';
+    }
+
+    // 截距绝对值判定
+    if (hundredPercentArea > 0) {
+        html += '<div class="report-line"><span class="r-label">截距绝对值判定：</span><span class="r-value ' + (intPass ? 'r-pass' : 'r-fail') + '">'
+            + (intPass ? '✓ 合格（截距绝对值 ' + absIntercept.toFixed(2) + ' ≤ 限值 ' + absResidualLimit.toFixed(2) + '）'
+                      : '✗ 不合格（截距绝对值 ' + absIntercept.toFixed(2) + ' > 限值 ' + absResidualLimit.toFixed(2) + '）')
+            + '</span></div>';
+    } else {
+        html += '<div class="report-line"><span class="r-label">截距绝对值判定：</span><span class="r-value">未设定</span></div>';
+    }
+
+    // 数据明细表格（默认折叠，点"查看数据明细"展开）
     let tbody = '';
     for (let i = 0; i < concentration.length; i++) {
         const yPred = slope * concentration[i] + intercept;
@@ -533,57 +583,87 @@ function generateReport() {
     }
     document.getElementById('reportTableBody').innerHTML = tbody;
 
-    const rssTssRatio = tss > 0 ? (rss / tss) * 100 : 0;
-    const rssTssPass = rssTssRatio <= 1;
-    const rssLimit = 1; // RSS/TSS 标准限值 1%
-
-    // 单点残差与截距判定（与主卡片保持一致的阈值与计算口径）
-    let maxAbsResidual = 0;
-    for (let i = 0; i < residuals.length; i++) maxAbsResidual = Math.max(maxAbsResidual, Math.abs(residuals[i]));
-    const absResidualLimit = hundredPercentArea > 0 ? hundredPercentArea * (residualLimitPercent / 100) : 0;
-    const absPass = hundredPercentArea > 0 && maxAbsResidual <= absResidualLimit;
-    const absResidualDisplay = hundredPercentArea > 0
-        ? (absPass ? '✓ 合格（最大绝对残差 ' + maxAbsResidual.toFixed(2) + ' ≤ 限值 ' + absResidualLimit.toFixed(2) + '）'
-                  : '✗ 不合格（最大绝对残差 ' + maxAbsResidual.toFixed(2) + ' > 限值 ' + absResidualLimit.toFixed(2) + '）')
-        : '未设定';
-
-    const absIntercept = Math.abs(intercept);
-    const interceptAbsLimit = absResidualLimit; // 同一百分数基准 × residualLimit%
-    const intPass = hundredPercentArea > 0 && absIntercept <= interceptAbsLimit;
-    const interceptAbsDisplay = hundredPercentArea > 0
-        ? (intPass ? '✓ 合格（截距绝对值 ' + absIntercept.toFixed(2) + ' ≤ 限值 ' + interceptAbsLimit.toFixed(2) + '）'
-                  : '✗ 不合格（截距绝对值 ' + absIntercept.toFixed(2) + ' > 限值 ' + interceptAbsLimit.toFixed(2) + '）')
-        : '未设定';
-
+    // 在报告底部加一个"查看数据明细"切换 + overall 判定（带绿色合格/红色不合格背景块，与主卡片一致）
     const overallPass = rssTssPass && (!hundredPercentArea || (absPass && intPass));
-
-    let reportHtml = '';
-    // 10 项与主卡片完全对齐：数据转换 / 回归方程 / 相关系数 r / 斜率 k / Y轴截距 b / RSS / TSS / RSS/TSS 比值 + RSS/TSS判定 / 单点残差判定 / 截距判定
-    reportHtml += '<div class="result-item"><span class="label">数据转换方式</span><span class="value">' + (transformNames[transform] || '未知') + '</span></div>';
-    reportHtml += '<div class="result-item"><span class="label">回归方程 (y = kx + b)</span><span class="value">y = ' + slope.toFixed(4) + 'x ' + (intercept >= 0 ? '+' : '-') + ' ' + Math.abs(intercept).toFixed(4) + '</span></div>';
-    reportHtml += '<div class="result-item"><span class="label">相关系数 (r)</span><span class="value">' + r.toFixed(6) + '</span></div>';
-    reportHtml += '<div class="result-item"><span class="label">斜率 (k)</span><span class="value">' + slope.toFixed(4) + '</span></div>';
-    reportHtml += '<div class="result-item"><span class="label">Y轴截距 (b)</span><span class="value">' + intercept.toFixed(4) + '</span></div>';
-    reportHtml += '<div class="result-item"><span class="label">残差平方和 (RSS)</span><span class="value">' + formatSciOrFixed(rss) + '</span></div>';
-    reportHtml += '<div class="result-item"><span class="label">总平方和 (TSS)</span><span class="value">' + formatSciOrFixed(tss) + '</span></div>';
-    reportHtml += '<div class="result-item"><span class="label">RSS/TSS 比值</span><span class="value ' + (rssTssPass ? 'pass' : 'fail') + '">' + rssTssRatio.toFixed(4) + '%</span></div>';
-    reportHtml += '<div class="result-item"><span class="label">RSS/TSS 判定</span><span class="value ' + (rssTssPass ? 'pass' : 'fail') + '">'
-        + (rssTssPass ? '✓ 合格（RSS/TSS ' + rssTssRatio.toFixed(4) + '% ≤ ' + rssLimit + '%）'
-                      : '✗ 不合格（RSS/TSS ' + rssTssRatio.toFixed(4) + '% > ' + rssLimit + '%）')
-        + '</span></div>';
-    reportHtml += '<div class="result-item"><span class="label">单点绝对残差判定</span><span class="value ' + (hundredPercentArea > 0 ? (absPass ? 'pass' : 'fail') : '') + '">' + absResidualDisplay + '</span></div>';
-    reportHtml += '<div class="result-item"><span class="label">截距绝对值判定</span><span class="value ' + (hundredPercentArea > 0 ? (intPass ? 'pass' : 'fail') : '') + '">' + interceptAbsDisplay + '</span></div>';
-
-    // 总判定
-    reportHtml += '<div class="judgment ' + (overallPass ? 'pass' : 'fail') + '" style="margin-top:16px;padding:14px;border-radius:8px;text-align:center;font-size:17px;font-weight:700;">'
+    html += '<div style="margin-top:14px;">'
+        + '<button type="button" id="toggleDataBtn" style="background:#ecf0f1;border:1px solid #dcdfe6;border-radius:6px;padding:6px 12px;font-size:13px;color:#34495e;cursor:pointer;">查看数据明细</button>'
+        + '</div>';
+    html += '<div class="judgment ' + (overallPass ? 'pass' : 'fail') + '" style="margin-top:14px;padding:14px;border-radius:8px;text-align:center;font-size:17px;font-weight:700;">'
         + (overallPass ? '✅ 合格<br><span style="font-size:13px;font-weight:normal;">线性关系评估符合要求</span>'
                        : '❌ 不合格<br><span style="font-size:13px;font-weight:normal;">线性关系评估不符合要求</span>')
         + '</div>';
 
-    document.getElementById('reportResults').innerHTML = reportHtml;
+    document.getElementById('reportResults').innerHTML = html;
+
+    // 绑定"查看数据明细"切换
+    const toggleBtn = document.getElementById('toggleDataBtn');
+    const dataSection = document.getElementById('reportDataSection');
+    if (toggleBtn && dataSection) {
+        toggleBtn.addEventListener('click', function () {
+            if (dataSection.style.display === 'none' || dataSection.style.display === '') {
+                dataSection.style.display = 'block';
+                toggleBtn.textContent = '收起数据明细';
+            } else {
+                dataSection.style.display = 'none';
+                toggleBtn.textContent = '查看数据明细';
+            }
+        });
+    }
+
+    // 保存报告文本供复制使用（存到闭包外的全局变量）
+    window.__lastReportText = buildReportText({
+        equation: equation, transform: transformLabel,
+        r: r.toFixed(6), slope: slope.toFixed(4), intercept: intercept.toFixed(4),
+        rss: formatSciOrFixed(rss), tss: formatSciOrFixed(tss),
+        rssTssRatio: rssTssRatio.toFixed(4), rssTssPass: rssTssPass,
+        maxAbsResidual: maxAbsResidual.toFixed(2),
+        absResidualLimit: absResidualLimit.toFixed(2),
+        absPass: absPass,
+        absIntercept: absIntercept.toFixed(2),
+        intPass: intPass,
+        hundredPercentArea: hundredPercentArea,
+        rssLimit: rssLimit,
+        overallPass: overallPass,
+        concentration: concentration, response: response, slope: slope, intercept: intercept, residuals: residuals
+    });
 
     document.getElementById('reportModal').classList.add('show');
     document.body.style.overflow = 'hidden';
+}
+
+// 纯文本报告构造（供复制使用，与 HTML 报告内容一致）
+function buildReportText(d) {
+    let t = '线性评估结果\n━━━━━━━━━━━━━━\n';
+    t += '数据转换方式：' + d.transform + '\n';
+    t += '回归方程 (y = kx + b)：' + d.equation + '\n';
+    t += '相关系数 (r)：' + d.r + '\n';
+    t += '斜率 (k)：' + d.slope + '\n';
+    t += 'Y轴截距 (b)：' + d.intercept + '\n';
+    t += '残差平方和 (RSS)：' + d.rss + '\n';
+    t += '总平方和 (TSS)：' + d.tss + '\n';
+    t += 'RSS/TSS比值：' + d.rssTssRatio + '%\n';
+    t += 'RSS/TSS判定：'
+        + (d.rssTssPass ? '✓ 合格（RSS/TSS ' + d.rssTssRatio + '% ≤ ' + d.rssLimit + '%）'
+                        : '✗ 不合格（RSS/TSS ' + d.rssTssRatio + '% > ' + d.rssLimit + '%）') + '\n';
+    if (d.hundredPercentArea > 0) {
+        t += '单点绝对残差判定：'
+            + (d.absPass ? '✓ 合格（最大绝对残差 ' + d.maxAbsResidual + ' ≤ 限值 ' + d.absResidualLimit + '）'
+                        : '✗ 不合格（最大绝对残差 ' + d.maxAbsResidual + ' > 限值 ' + d.absResidualLimit + '）') + '\n';
+        t += '截距绝对值判定：'
+            + (d.intPass ? '✓ 合格（截距绝对值 ' + d.absIntercept + ' ≤ 限值 ' + d.absResidualLimit + '）'
+                        : '✗ 不合格（截距绝对值 ' + d.absIntercept + ' > 限值 ' + d.absResidualLimit + '）') + '\n';
+    } else {
+        t += '单点绝对残差判定：未设定\n';
+        t += '截距绝对值判定：未设定\n';
+    }
+    t += '━━━━━━━━━━━━━━\n';
+    t += '总体判定：' + (d.overallPass ? '✅ 合格（线性关系评估符合要求）' : '❌ 不合格（线性关系评估不符合要求）') + '\n';
+    t += '\n数据明细：\n';
+    for (let i = 0; i < d.concentration.length; i++) {
+        const yPred = d.slope * d.concentration[i] + d.intercept;
+        t += (i + 1) + '. X=' + d.concentration[i] + ', Y=' + d.response[i] + ', 预测=' + yPred.toFixed(4) + ', 残差=' + d.residuals[i].toFixed(4) + '\n';
+    }
+    return t;
 }
 
 // 数值显示辅助：数值过小/过大时自动用科学计数法（与主页面展示一致）
@@ -617,8 +697,11 @@ function copyResults() {
 }
 
 function copyReport() {
-    copyResults();
-    closeReport();
+    if (window.__lastReportText) {
+        copyToClipboard(window.__lastReportText);
+    } else {
+        copyResults();
+    }
 }
 
 function copyToClipboard(text) {
