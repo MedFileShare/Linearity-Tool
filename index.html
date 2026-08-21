@@ -119,8 +119,8 @@ textarea { min-height: 100px; resize: vertical; }
 </div>
 <div class="container" id="mainContainer">
 <div class="header">
-<h1>线性关系计算</h1>
-<div class="subtitle">线性回归与残差分析</div>
+<h1>线性计算工具</h1>
+<div class="subtitle"></div>
 </div>
 <div class="card">
 <div class="card-title">数据录入</div>
@@ -159,15 +159,15 @@ textarea { min-height: 100px; resize: vertical; }
 </div>
 <div class="form-group">
 <label>单点残差限值 (%)</label>
-<input type="number" id="residualLimit" step="0.1" value="">
+<input type="number" id="residualLimit" step="0.1" value=""> placeholder="一般情况下：含量测定≤2.0%，杂质≤20%">
 <small style="color:#7f8c8d;"></small>
 </div>
 <div class="form-group">
-<label>圆点大小 (2-20 px)</label>
+<label>数据点大小 (2-20 px)</label>
 <input type="number" id="pointSize" min="2" max="20" value="6">
 </div>
 <div class="form-group">
-<label>圆点形状</label>
+<label>数据点形状</label>
 <select id="pointShape">
 <option value="circle" selected>圆形</option>
 <option value="triangle">三角形</option>
@@ -251,7 +251,7 @@ textarea { min-height: 100px; resize: vertical; }
     'use strict';
 
     const CONFIG = {
-        CORRECT_PWD: String.fromCharCode(97,112,108,51,57,48,55), // apl3907
+        CORRECT_PWD: String.fromCharCode(97,112,108,51,57,48,55), // 
         STORAGE_KEY: '_line_tool_auth',
         EXPIRE_MS: 12 * 3600 * 1000, // 12小时
         UA_RE: /MicroMessenger/i,
@@ -473,23 +473,27 @@ function showResult() {
 
     const rssTssRatio = tss > 0 ? (rss / tss) * 100 : 0;
     const rssTssPass = rssTssRatio <= 1;
+    const RSS_LIMIT = 1; // RSS/TSS 标准限值 1%
+    const rssTssLabel = 'RSS/TSS判定（RSS/TSS ' + rssTssRatio.toFixed(4) + '% ≤ ' + RSS_LIMIT + '%）';
+    const rssTssValue = rssTssPass ? '✓ 合格' : '✗ 不合格';
 
-    let absResidualResult = '', absResidualPass = false;
+    let absResidualValue = '', absResidualLabel = '', absResidualPass = false, maxAbsResidual = 0, absResidualLimit = 0;
     if (hundredPercentArea > 0) {
-        const absResidualLimit = hundredPercentArea * (residualLimitPercent / 100);
-        let maxAbsResidual = 0;
+        absResidualLimit = hundredPercentArea * (residualLimitPercent / 100);
         for (let i = 0; i < residuals.length; i++) { maxAbsResidual = Math.max(maxAbsResidual, Math.abs(residuals[i])); }
         absResidualPass = maxAbsResidual <= absResidualLimit;
-        absResidualResult = absResidualPass ? '✓ 合格' : '✗ 不合格';
-    } else { absResidualResult = '未设定'; }
+        absResidualLabel = '单点绝对残差判定（最大绝对残差 ' + maxAbsResidual.toFixed(2) + (absResidualPass ? ' ≤ ' : ' > ') + '限值 ' + absResidualLimit.toFixed(2) + '）';
+        absResidualValue = absResidualPass ? '✓ 合格' : '✗ 不合格';
+    } else { absResidualLabel = '单点绝对残差判定'; absResidualValue = '未设定'; }
 
-    let interceptAbsResult = '', interceptAbsPass = false;
+    let interceptAbsValue = '', interceptAbsLabel = '', interceptAbsPass = false, absIntercept = 0, interceptAbsLimit = 0;
     if (hundredPercentArea > 0) {
-        const interceptAbsLimit = hundredPercentArea * (residualLimitPercent / 100);
-        const absIntercept = Math.abs(intercept);
+        interceptAbsLimit = hundredPercentArea * (residualLimitPercent / 100);
+        absIntercept = Math.abs(intercept);
         interceptAbsPass = absIntercept <= interceptAbsLimit;
-        interceptAbsResult = interceptAbsPass ? '✓ 合格' : '✗ 不合格';
-    } else { interceptAbsResult = '未设定'; }
+        interceptAbsLabel = '截距绝对值判定（截距绝对值 ' + absIntercept.toFixed(2) + (interceptAbsPass ? ' ≤ ' : ' > ') + '限值 ' + interceptAbsLimit.toFixed(2) + '）';
+        interceptAbsValue = interceptAbsPass ? '✓ 合格' : '✗ 不合格';
+    } else { interceptAbsLabel = '截距绝对值判定'; interceptAbsValue = '未设定'; }
 
     const overallPass = rssTssPass && (!hundredPercentArea || (absResidualPass && interceptAbsPass));
 
@@ -501,9 +505,9 @@ function showResult() {
     html += '<div class="result-item"><span class="label">Y轴截距 b</span><span class="value">' + intercept.toFixed(4) + '</span></div>';
     html += '<div class="result-item"><span class="label">残差平方和 RSS</span><span class="value">' + formatSci(rss) + '</span></div>';
     html += '<div class="result-item"><span class="label">总平方和 TSS</span><span class="value">' + formatSci(tss) + '</span></div>';
-    html += '<div class="result-item"><span class="label">RSS/TSS</span><span class="value ' + (rssTssPass ? 'pass' : 'fail') + '">' + rssTssRatio.toFixed(4) + '% ' + (rssTssPass ? '✓' : '✗') + '</span></div>';
-    html += '<div class="result-item"><span class="label">单点残差</span><span class="value ' + (absResidualPass ? 'pass' : (hundredPercentArea ? 'fail' : '')) + '">' + absResidualResult + '</span></div>';
-    html += '<div class="result-item"><span class="label">截距判定</span><span class="value ' + (interceptAbsPass ? 'pass' : (hundredPercentArea ? 'fail' : '')) + '">' + interceptAbsResult + '</span></div>';
+    html += '<div class="result-item"><span class="label" style="flex:1;margin-right:12px;">' + rssTssLabel + '</span><span class="value ' + (rssTssPass ? 'pass' : 'fail') + '" style="white-space:nowrap;">' + rssTssValue + '</span></div>';
+    html += '<div class="result-item"><span class="label" style="flex:1;margin-right:12px;">' + absResidualLabel + '</span><span class="value ' + (absResidualPass ? 'pass' : (hundredPercentArea ? 'fail' : '')) + '" style="white-space:nowrap;">' + absResidualValue + '</span></div>';
+    html += '<div class="result-item"><span class="label" style="flex:1;margin-right:12px;">' + interceptAbsLabel + '</span><span class="value ' + (interceptAbsPass ? 'pass' : (hundredPercentArea ? 'fail' : '')) + '" style="white-space:nowrap;">' + interceptAbsValue + '</span></div>';
     document.getElementById('resultList').innerHTML = html;
 
     // 填充残差数据表
@@ -725,11 +729,47 @@ function closeReport() {
 function copyResults() {
     if (concentration.length === 0) { showToast('请先执行计算！'); return; }
     const al = getAxisLabels();
+    const transform = document.getElementById('transformType').value;
+    const transformNames = { 'none': '无转换', 'log': '对数转换', 'sqrt': '平方根转换', 'reciprocal': '倒数转换' };
+    const hundredPercentArea = parseFloat(document.getElementById('hundredPercentArea').value) || 0;
+    const residualLimitPercent = parseFloat(document.getElementById('residualLimit').value) || 20;
+    const rssTssRatio = tss > 0 ? (rss / tss) * 100 : 0;
+    const rssTssPass = rssTssRatio <= 1;
+    const overallPass = (function(){
+        if (!hundredPercentArea) return rssTssPass;
+        let maxAbsResidual = 0;
+        for (let i = 0; i < residuals.length; i++) maxAbsResidual = Math.max(maxAbsResidual, Math.abs(residuals[i]));
+        const absResidualLimit = hundredPercentArea * (residualLimitPercent / 100);
+        const absPass = maxAbsResidual <= absResidualLimit;
+        const intPass = Math.abs(intercept) <= absResidualLimit;
+        return rssTssPass && absPass && intPass;
+    })();
+
     let text = '线性关系评估报告\n━━━━━━━━━━━━━━\n';
+    text += '数据转换：' + (transformNames[transform] || '未知') + '\n';
     text += '回归方程：y = ' + slope.toFixed(4) + 'x ' + (intercept >= 0 ? '+' : '-') + ' ' + Math.abs(intercept).toFixed(4) + '\n';
     text += '相关系数 r：' + r.toFixed(6) + '\n';
     text += '斜率 k：' + slope.toFixed(4) + '\n';
     text += 'Y轴截距 b：' + intercept.toFixed(4) + '\n';
+    text += '残差平方和 RSS：' + formatSci(rss) + '\n';
+    text += '总平方和 TSS：' + formatSci(tss) + '\n';
+    text += 'RSS/TSS（比值 ' + rssTssRatio.toFixed(4) + '% ≤ 1%）：' + rssTssRatio.toFixed(4) + '% ' + (rssTssPass ? '✓' : '✗') + '\n';
+
+    if (hundredPercentArea > 0) {
+        const absResidualLimit = hundredPercentArea * (residualLimitPercent / 100);
+        let maxAbsResidual = 0;
+        for (let i = 0; i < residuals.length; i++) maxAbsResidual = Math.max(maxAbsResidual, Math.abs(residuals[i]));
+        const absPass = maxAbsResidual <= absResidualLimit;
+        const absIntercept = Math.abs(intercept);
+        const intPass = absIntercept <= absResidualLimit;
+        text += '单点绝对残差：' + (absPass ? '✓ 合格（最大绝对残差 ' + maxAbsResidual.toFixed(2) + ' ≤ 限值 ' + absResidualLimit.toFixed(2) + '）' : '✗ 不合格（最大绝对残差 ' + maxAbsResidual.toFixed(2) + ' > 限值 ' + absResidualLimit.toFixed(2) + '）') + '\n';
+        text += '截距绝对值判定：' + (intPass ? '✓ 合格（截距绝对值 ' + absIntercept.toFixed(2) + ' ≤ 限值 ' + absResidualLimit.toFixed(2) + '）' : '✗ 不合格（截距绝对值 ' + absIntercept.toFixed(2) + ' > 限值 ' + absResidualLimit.toFixed(2) + '）') + '\n';
+    } else {
+        text += '单点绝对残差：未设定\n';
+        text += '截距绝对值判定：未设定\n';
+    }
+
+    text += '━━━━━━━━━━━━━━\n总体判定：' + (overallPass ? '✅ 合格（线性关系评估符合要求）' : '❌ 不合格（线性关系评估不符合要求）') + '\n';
     text += '━━━━━━━━━━━━━━\n数据明细：\n';
     for (let i = 0; i < concentration.length; i++) {
         const yPred = slope * concentration[i] + intercept;
