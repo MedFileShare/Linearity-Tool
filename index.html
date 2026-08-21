@@ -124,7 +124,7 @@ textarea { min-height: 100px; resize: vertical; }
 </div>
 <div class="card">
 <div class="card-title">数据录入</div>
-<div class="tips"><strong>提示：</strong>X/Y 数据每行一个数值，需一一对应</div>
+<div class="tips"><strong>提示：</strong>X/Y 数据每行一个数值，需一 一对应</div>
 <div class="form-group">
 <label>X轴标签（横坐标）</label>
 <input type="text" id="xAxisLabel" value="浓度 (μg/mL)">
@@ -159,8 +159,8 @@ textarea { min-height: 100px; resize: vertical; }
 </div>
 <div class="form-group">
 <label>单点残差限值 (%)</label>
-<input type="number" id="residualLimit" step="0.1" value=""> 
-<small style="color:#7f8c8d;">含量测定≤2.0%，杂质≤20%</small>
+<input type="number" id="residualLimit" step="0.1" placeholder="一般情况下：含量测定≤2.0%，杂质≤20%"> 
+<small style="color:#7f8c8d;"></small>
 </div>
 <div class="form-group">
 <label>数据点大小 (2-20 px)</label>
@@ -415,6 +415,7 @@ function clearData() {
     document.getElementById('respText').value = '';
     document.getElementById('transformType').value = 'none';
     document.getElementById('hundredPercentArea').value = '';
+    document.getElementById('residualLimit').value = '';
     document.getElementById('resultBox').classList.remove('show');
     document.getElementById('residualTableCard').style.display = 'none';
     document.getElementById('residualTableBody').innerHTML = '';
